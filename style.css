@@ -1,0 +1,65 @@
+
+.white {
+    background-color: white;
+}
+.background {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 100%;
+}
+.black {
+    background-color: black;
+}
+.whitesmoke {
+    background-color: whitesmoke;
+}
+.lightblue {
+    background-color: lightsteelblue;
+}
+.grey {
+    background-color: gainsboro;
+}
+.greentext {
+    color: darkseagreen;
+}
+.box {
+    width: 100%;
+}
+.fullwidth {
+    width: 100%;
+}
+.signature {
+    font-family: cursive;
+}
+.myfooter {
+    position:absolute;
+    bottom: 0;
+    margin: 0;
+    width: 100%;
+}
+.decentpadding {
+    padding: 0.1%;
+}
+.fantasy {
+    font-family: fantasy;
+}
+.novertmargin {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+.outputbox {
+    padding: 3%;
+    padding-bottom: 1%;
+    /*min-height: 30vh;*/
+    max-height: 60vh;
+    overflow-y: scroll;
+    font-family: fantasy;
+}
+.contentcenter {
+    text-align: center;
+}
+.input {
+    font-family: fantasy;
+    padding-left: 3%;
+}
