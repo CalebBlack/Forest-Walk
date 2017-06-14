@@ -1,5 +1,10 @@
 function log(data) {
-    output.innerHTML += data + "<br>"
+    var text = document.createElement("p");
+    text.innerHTML += data;
+    output.appendChild(text);
+    console.log(output.scrollHeight);
+    output.scrollTop = output.scrollHeight;
+    console.log(output.scrollTop);
 }
 
 function submitInput() {
