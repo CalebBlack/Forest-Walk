@@ -9,7 +9,7 @@ function log(data) {
 
 function submitInput() {
     var inp = input.value;
-    inp.trim();
+    inp = inp.trim();
     input.value = "";
     if (inp != "") {
         handleInput(inp);
@@ -18,10 +18,13 @@ function submitInput() {
 
 function handleInput(inp) {
     game.handleInput(inp);
+    lastInput = inp;
 }
+
 function clearOutput() {
     output.innerHTML = "";
 }
+
 function randomBetween(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min);
 }
@@ -32,21 +35,40 @@ var Room = function (greetingIn) {
         return greetingIn
     };
     this.inventory = [];
+    this.itemAliases = {};
+    this.itemMessages = {};
     this.pickUp = function (itemName) {
         var index = this.inventory.indexOf(itemName);
+        if (index < 0) {
+            if (this.itemAliases[itemName] != null) {
+                index = this.inventory.indexOf(this.itemAliases[itemName]);
+            }
+        }
         if (index != -1) {
-            log("Picked up " + itemName + "!");
+            var realItem = this.inventory[index];
+            var message = "Picked up " + realItem + "!";
+            if (this.itemMessages[realItem] != null) {
+                message = this.itemMessages[realItem];
+            }
+            log(message);
             this.inventory.splice(index, 1);
-            return itemName;
+            return realItem;
         } else {
             log(itemName + " not found.");
             return null;
         }
     }
-    this.open = function(name){log("There is nothing to open");};
+    this.open = function (name) {
+        log("There is nothing to open");
+    };
+    this.drop = function (name) {
+        this.inventory.push(name);
+        return true;
+    }
 }
 var game = {
-    start: function () {
+    playerName: "",
+    initialize: function () {
         log("Welcome to Forest Walk");
         log("Start? (yes/no)")
     },
@@ -63,7 +85,7 @@ var game = {
         //log("Obtained "+item);
     },
     help: function () {
-        log("Commands: Look, go (direction), inventory, pick up (name), clear");
+        log("Commands: Look, go (direction), inventory, pick up (name), clear, drop (name), eat (name)");
     },
     position: {
         x: 6,
@@ -71,13 +93,43 @@ var game = {
     },
     map: [new Array(13), new Array(13), new Array(13), new Array(13), new Array(13), new Array(13), new Array(13), new Array(13), new Array(13), new Array(13), new Array(13), new Array(13), new Array(13)],
     isStarted: false,
+    drop: function (itemName) {
+        var ind = this.inventory.indexOf(itemName);
+        if (ind >= 0) {
+            if (this.getRoom().drop(itemName)) {
+                this.inventory.splice(ind, 1);
+                log("Dropped " + itemName + "!");
+            }
+        } else {
+            log("You do not have that item.");
+        }
+    },
     handleInput: function (data) {
+        data = data.trim();
         var lower = data.toLowerCase();
         var args = lower.split(" ");
         if (this.isStarted) {
+            if (this.playerName === "") {
+                if (lower !== "") {
+                    this.playerName = lower;
+                    log("You wake up in a calm forest...<br>The air is fresh and full of life.");
+                    this.look();
+                } else {
+                    log("Please enter a name.");
+                }
+                return true;
+            }
             if (args[0] === "look") {
                 this.look();
-            } else if (args[0] === "go") {
+            } else if (args[0] === "eat") {
+                if (args[1] != undefined && args[1].length > 0) {
+                    this.eat(args[1]);
+                }
+            } else if (args[0] === "drop") {
+                if (args[1] != undefined && args[1].length > 0) {
+                    this.drop(args[1]);
+                }
+            } else if (args[0] === "go" || args[0] === "walk") {
                 if (args[1] === "north" || args[1] === "up") {
                     //log("Going north.");
                     this.move("north");
@@ -119,7 +171,9 @@ var game = {
                 this.printInventory();
             } else if (args[0] === "pick" && args[1] === "up") {
                 this.pickUp(args[2]);
-            } else if (args[0] === "clear"){
+            } else if (args[0] === "pick") {
+                this.pickUp(args[1]);
+            } else if (args[0] === "clear") {
                 clearOutput();
                 this.look();
             } else {
@@ -136,14 +190,26 @@ var game = {
         } else {
             if (lower == "yes") {
                 this.isStarted = true;
-                log("You wake up in a calm forest...");
-                log("The air is fresh and full of life.");
-                this.look();
+                log("Please enter a name.");
             } else if (lower == "no") {
                 log("Okay, type yes when you are ready.");
             } else {
                 log("Stop it :(");
             }
+        }
+    },
+    eat: function (itemName) {
+        var edibles = ["apples", "berries"];
+        var ind = this.inventory.indexOf(itemName);
+        if (ind >= 0) {
+            if (edibles.indexOf(itemName) >= 0) {
+                this.inventory.splice(ind, 1);
+                log("You ate the " + itemName + "!");
+            } else {
+                log("You can't eat that!");
+            }
+        } else {
+            log("You don't have that!");
         }
     },
     printInventory: function () {
@@ -215,6 +281,16 @@ var game = {
 game.map[6][6] = new Room("You are in a small opening surrounded by trees...<br>Everything is silent.");
 game.map[6][5] = new Room("There is a stream, and a fruiting apple tree.");
 game.map[6][5].inventory = ["apples"];
+game.map[6][5].itemAliases = {apple: "apples"};
+game.map[6][5].itemMessages = {apples: "You picked the apples."};
+game.map[6][5].greeting = function () {
+    if (this.inventory.indexOf("apples") != -1) {
+        return "There is a stream, and a fruiting apple tree.";
+    } else {
+        return "There is a stream, and a fruitless apple tree.";
+    }
+}
+
 game.map[5][6] = new Room("You are surrounded by a patch of berries, dim under the great trees.");
 game.map[5][6].inventory = [
 "berries"];
@@ -227,19 +303,25 @@ game.map[5][6].greeting = function () {
 }
 game.map[5][5] = new Room("There is a small shack to the north of you, with the smell of fresh dessert wafting out.");
 game.map[5][4] = new Room("Inside this hut there is just a kitchen, the shelves are bulging with candy. You hear a scratching from inside the oven.");
-//End of Game Data 
+//End of Game Data
 //Main
+var lastInput = "";
 var output = document.getElementById("output");
 var input = document.getElementById("input");
 input.onkeydown = function (event) {
     if (event.keyCode == 13) {
         submitInput();
+    } else if (event.keyCode == 38 && lastInput !== "") {
+        this.value = lastInput;
+    } else if (event.keyCode == 40 && this.value.trim() !== ""){
+        lastInput = this.value;
+        this.value = "";
     }
 };
 window.onerror = function () {
     log("Error.");
 };
-game.start();
+game.initialize();
 
 
 
