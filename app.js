@@ -1,3 +1,142 @@
+function setCookie(cname, cvalue, exdays) {
+    if (exdays != null) {
+        var d = new Date();
+        d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
+        var expires = "expires=" + d.toUTCString();
+        document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+    } else {
+        document.cookie = cname + "=" + cvalue + ";path=/";
+
+    }
+}
+
+function Monster(name, hp, attack, inventory) {
+    this.name = name;
+    this.hp = hp;
+    this.att = attack;
+    this.inventory = inventory || [];
+}
+
+function getCookie(cname) {
+    var name = cname + "=";
+    var decodedCookie = decodeURIComponent(document.cookie);
+    var ca = decodedCookie.split(';');
+    for (var i = 0; i < ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) == 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return "";
+}
+var BattleManager = {
+    player: {
+        maxHP: 100,
+        hp: 100,
+        att: 4
+    },
+    checkLose: function () {
+        if (this.player.hp <= 0) {
+            log("You died!");
+            game.lose();
+        }
+    },
+    gameHeal: function (amount) {
+        this.player.hp += amount;
+        this.checkLose();
+    },
+    gameDamage: function (amount) {
+        this.player.hp -= amount;
+        this.checkLose();
+    },
+    heal: function (amount) {
+        this.player.hp = Math.min(this.player.hp, this.player.maxHP);
+    },
+    active: false,
+    opponent: null,
+    battleRoom: null,
+    canGameRun: function (input) {
+        if (this.active) {
+            this.action(input);
+            return false;
+        } else {
+            return true;
+        }
+    },
+    startBattle: function (monster,room) {
+        this.opponent = monster;
+        this.active = true;
+        this.battleRoom = room;
+        log("Battling " + monster.name + ", HP:" + monster.hp + " ATT:" + monster.att);
+    },
+    action: function (data) {
+        var lower = data.trim().toLowerCase();
+        if (lower === "run") {
+            this.tryRun();
+        } else if (lower === "status") {
+            this.status();
+        } else if (lower === "attack") {
+            this.tryAttack();
+            if (this.active) {
+                this.enemyTurn();
+            }
+        } else {
+            log("Invalid Battle Input: " + lower);
+        }
+    },
+    checkOpponent: function () {
+        if (this.opponent.hp <= 0) {
+            this.win();
+        } else {
+
+        }
+    },
+    tryAttack: function () {
+        this.attack();
+    },
+    attack: function () {
+        this.opponent.hp -= this.player.att;
+        log("You dealt " + this.player.att + " damage.");
+        this.checkOpponent();
+    },
+    status: function () {
+        if (this.opponent != null && this.opponent != undefined) {
+            log("Your hp: " + this.player.hp + ", " + this.opponent.name + "'s hp: " + this.opponent.hp);
+        } else {
+            log("Your hp: " + this.player.hp);
+        }
+    },
+    win: function () {
+        log("You defeated " + this.opponent.name + ".");
+        this.battleRoom.defeated(this.opponent.name);
+        this.endBattle();
+    },
+    enemyTurn: function () {
+        this.player.hp -= this.opponent.att;
+        log(this.opponent.name + " dealt " + this.opponent.att + " damage.");
+        this.checkLose();
+    },
+    tryRun: function () {
+        if (randomBetween(0, Math.max(Math.round((this.opponent.att - this.player.att + 1) / 2), 0)) == 0) {
+            this.run();
+        } else {
+            log("Failed to escape.");
+            this.enemyTurn();
+        }
+    },
+    run: function () {
+        log("You ran away!");
+        this.endBattle();
+    },
+    endBattle: function () {
+        this.active = false;
+        this.opponent = null;
+    }
+}
+
 function log(data) {
     var text = document.createElement("p");
     text.innerHTML += data;
@@ -31,9 +170,42 @@ function randomBetween(min, max) {
 //End of Functions
 //Game Data
 var Room = function (greetingIn) {
-    this.greeting = function () {
-        return greetingIn
+    this.greeting = greetingIn;
+    this.enemies = [[], []];
+    this.greet = function () {
+        log(this.greeting);
+        if (this.enemies[0].length > 0) {
+            var out = "";
+            for (var i = 0; i < this.enemies[0].length; i++) {
+                if (out !== "") {
+                    out += ", ";
+                }
+                out += this.enemies[0][i];
+            }
+            log("Monsters: " + out);
+        }
     };
+    this.defeated = function(enemyName) {
+        var ind = this.enemies[0].indexOf(enemyName);
+        if (ind > -1) {
+            this.enemies[0].splice(ind,1);
+            this.enemies[1].splice(ind,1);
+        }
+    }
+    this.battle = function (enemyName) {
+        var ind = this.enemies[0].indexOf(enemyName);
+        if (ind > -1) {
+            BattleManager.startBattle(this.enemies[1][ind],this);
+            return true;
+        } else {
+            log("Enemy " + enemyName + " not found.");
+            return false;
+        }
+    };
+    this.addEnemy = function (enemy) {
+        this.enemies[0].push(enemy.name);
+        this.enemies[1].push(enemy);
+    }
     this.inventory = [];
     this.itemAliases = {};
     this.itemMessages = {};
@@ -67,10 +239,13 @@ var Room = function (greetingIn) {
     }
 }
 var game = {
+    won: false,
+    lost: false,
     playerName: "",
     initialize: function () {
         log("Welcome to Forest Walk");
-        log("Start? (yes/no)")
+        log("Start? (yes/no)");
+        input.value = "yes";
     },
     inventory: [],
     pickUp: function (item) {
@@ -85,7 +260,7 @@ var game = {
         //log("Obtained "+item);
     },
     help: function () {
-        log("Commands: Look, go (direction), inventory, pick up (name), clear, drop (name), eat (name)");
+        log("Commands: Look, battle {name}, go (direction), inventory, pick up (name), clear, drop (name), eat (name), status");
     },
     position: {
         x: 6,
@@ -104,14 +279,30 @@ var game = {
             log("You do not have that item.");
         }
     },
+    win: function () {
+        if (!this.won && !this.lost) {
+            this.won = true;
+            alert("You Win!");
+        }
+    },
+    lose: function () {
+        if (!this.won && !this.lost) {
+            this.lost = true;
+            alert("You lose :(");
+        }
+    },
     handleInput: function (data) {
+        if (!BattleManager.canGameRun(data)) {
+            return;
+        }
         data = data.trim();
         var lower = data.toLowerCase();
         var args = lower.split(" ");
         if (this.isStarted) {
             if (this.playerName === "") {
                 if (lower !== "") {
-                    this.playerName = lower;
+                    this.playerName = data;
+                    setCookie("name", data, null);
                     log("You wake up in a calm forest...<br>The air is fresh and full of life.");
                     this.look();
                 } else {
@@ -124,7 +315,11 @@ var game = {
             } else if (args[0] === "eat") {
                 if (args[1] != undefined && args[1].length > 0) {
                     this.eat(args[1]);
+                } else {
+                    log("Invalid Second Argument.");
                 }
+            } else if (args[0] === "status") {
+                BattleManager.status();
             } else if (args[0] === "drop") {
                 if (args[1] != undefined && args[1].length > 0) {
                     this.drop(args[1]);
@@ -176,6 +371,10 @@ var game = {
             } else if (args[0] === "clear") {
                 clearOutput();
                 this.look();
+            } else if (false) {
+
+            } else if (args[0] === "battle") {
+                this.getRoom().battle(args[1]);
             } else {
                 var rand = randomBetween(0, 3);
                 if (rand < 2) {
@@ -191,6 +390,7 @@ var game = {
             if (lower == "yes") {
                 this.isStarted = true;
                 log("Please enter a name.");
+                input.value = defaultName;
             } else if (lower == "no") {
                 log("Okay, type yes when you are ready.");
             } else {
@@ -200,11 +400,23 @@ var game = {
     },
     eat: function (itemName) {
         var edibles = ["apples", "berries"];
+        var hp = [10, -10];
         var ind = this.inventory.indexOf(itemName);
         if (ind >= 0) {
             if (edibles.indexOf(itemName) >= 0) {
+                var health = hp[edibles.indexOf(itemName)];
                 this.inventory.splice(ind, 1);
-                log("You ate the " + itemName + "!");
+                if (health > 0) {
+                    log("You ate the " + itemName + ", restoring " + health + " hp.");
+                    BattleManager.gameHeal(health);
+                } else if (health < 0) {
+                    log("You ate the " + itemName + ", and lost " + Math.abs(health) + " hp.");
+                    BattleManager.gameDamage(Math.abs(health));
+                } else {
+                    log("You ate the " + itemName + "!");
+                }
+            } else if (itemName === "horse") {
+                log("NEIIIGH :(");
             } else {
                 log("You can't eat that!");
             }
@@ -226,7 +438,7 @@ var game = {
         return this.map[this.position.x][this.position.y];
     },
     look: function () {
-        log(this.getRoom().greeting());
+        this.getRoom().greet();
     },
     move: function (direction) {
         var velocity = [0, 0];
@@ -279,11 +491,16 @@ var game = {
     }
 }
 game.map[6][6] = new Room("You are in a small opening surrounded by trees...<br>Everything is silent.");
+game.map[6][6].addEnemy(new Monster("zorg", 30, 5));
 game.map[6][5] = new Room("There is a stream, and a fruiting apple tree.");
 game.map[6][5].inventory = ["apples"];
-game.map[6][5].itemAliases = {apple: "apples"};
-game.map[6][5].itemMessages = {apples: "You picked the apples."};
-game.map[6][5].greeting = function () {
+game.map[6][5].itemAliases = {
+    apple: "apples"
+};
+game.map[6][5].itemMessages = {
+    apples: "You picked the apples."
+};
+game.map[6][5].greet = function () {
     if (this.inventory.indexOf("apples") != -1) {
         return "There is a stream, and a fruiting apple tree.";
     } else {
@@ -294,26 +511,67 @@ game.map[6][5].greeting = function () {
 game.map[5][6] = new Room("You are surrounded by a patch of berries, dim under the great trees.");
 game.map[5][6].inventory = [
 "berries"];
-game.map[5][6].greeting = function () {
+game.map[5][6].greet = function () {
     if (this.inventory.indexOf("berries") != -1) {
-        return "You are surrounded by a patch of berries, dim under the great trees.";
+        log("You are surrounded by a patch of berries, dim under the great trees.");
     } else {
-        return "You are surrounded by a patch of barren berry bushes."
+        log("You are surrounded by a patch of barren berry bushes.");
     }
 }
 game.map[5][5] = new Room("There is a small shack to the north of you, with the smell of fresh dessert wafting out.");
 game.map[5][4] = new Room("Inside this hut there is just a kitchen, the shelves are bulging with candy. You hear a scratching from inside the oven.");
+game.map[6][7] = new Room("There is a pentagram on the blood soaked forest floor. The surrounding trees are scorched.");
+game.map[7][7] = new Room();
+game.map[7][7].inventory = ["horse"];
+game.map[7][7].greet = function () {
+    if (this.inventory.indexOf("horse") != -1) {
+        return "There is a breathtaking waterfall, and a horse drinking from the resulting river.";
+    } else {
+        return "There is a breathtaking waterfall, flowing into a river.";
+    }
+
+}
+game.map[7][8] = new Room("You see a mysterious glowing turd.");
+game.map[7][8].inventory = ["turd"];
+game.map[7][8].pickUp = function (itemName) {
+    var index = this.inventory.indexOf(itemName);
+    if (index < 0) {
+        if (this.itemAliases[itemName] != null) {
+            index = this.inventory.indexOf(this.itemAliases[itemName]);
+        }
+    }
+    if (index != -1) {
+        var realItem = this.inventory[index];
+        var message = "Picked up " + realItem + "!";
+        if (this.itemMessages[realItem] != null) {
+            message = this.itemMessages[realItem];
+        }
+        log(message);
+        this.inventory.splice(index, 1);
+        if (realItem === "turd") {
+            game.win();
+        }
+        return realItem;
+    } else {
+        log(itemName + " not found.");
+        return null;
+    }
+}
 //End of Game Data
 //Main
 var lastInput = "";
 var output = document.getElementById("output");
 var input = document.getElementById("input");
+var defaultName = getCookie("name");
+if (defaultName == null || defaultName == undefined) {
+    defaultName = "";
+}
 input.onkeydown = function (event) {
     if (event.keyCode == 13) {
         submitInput();
     } else if (event.keyCode == 38 && lastInput !== "") {
         this.value = lastInput;
-    } else if (event.keyCode == 40 && this.value.trim() !== ""){
+    } else if (event.keyCode == 40 && this.value.trim() !== "") {
         lastInput = this.value;
         this.value = "";
     }
